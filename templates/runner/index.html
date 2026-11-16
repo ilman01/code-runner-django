@@ -344,8 +344,11 @@
   }
 
   function applyWorkspace(workspace) {
+    // `version` is used by localStorage workspaces. Exported project files use
+    // the clearer `languageVersion` field; keep the fallback for old workspaces.
+    const requestedLanguageVersion = workspace.languageVersion ?? workspace.version;
     const option = [...languageSelect.options].find(item =>
-      item.value === workspace.language && item.dataset.version === workspace.version
+      item.value === workspace.language && item.dataset.version === requestedLanguageVersion
     ) || [...languageSelect.options].find(item => item.value === workspace.language);
     if (option) languageSelect.value = option.value;
     if (editor) {
@@ -365,10 +368,10 @@
     const option = languageSelect.selectedOptions[0];
     const project = {
       format: 'piston-code-runner',
-      version: 1,
+      schemaVersion: 1,
       exportedAt: new Date().toISOString(),
       language: languageSelect.value,
-      version: option ? option.dataset.version : '',
+      languageVersion: option ? option.dataset.version : '',
       code: editor ? editor.getValue() : document.getElementById('code-fallback').value,
       cases: cases.map(test => ({input: test.input, expected: test.expected}))
     };
@@ -385,14 +388,30 @@
   async function importWorkspace(file) {
     try {
       const project = JSON.parse(await file.text());
-      if (project.format !== 'piston-code-runner' || project.version !== 1 ||
+      if (!project || typeof project !== 'object' || Array.isArray(project) ||
+          project.format !== 'piston-code-runner' ||
+          (project.schemaVersion !== 1 && project.version !== 1 &&
+            !(typeof project.version === 'string' && project.version.length > 0)) ||
+          typeof project.language !== 'string' ||
           typeof project.code !== 'string' || !Array.isArray(project.cases)) {
         throw new Error('This file is not a supported Code Runner project.');
       }
       if (!project.cases.every(test => test && typeof test.input === 'string' && typeof test.expected === 'string')) {
         throw new Error('One or more test cases are invalid.');
       }
-      applyWorkspace({...project, cases: project.cases.map(test => ({input: test.input, expected: test.expected}))});
+
+      // Older downloads accidentally stored the Piston runtime version in
+      // `version`, overwriting the intended project schema version. Accept
+      // those files and translate their version into the current field.
+      const languageVersion = typeof project.languageVersion === 'string'
+        ? project.languageVersion
+        : (typeof project.version === 'string' ? project.version : '');
+      applyWorkspace({
+        language: project.language,
+        version: languageVersion,
+        code: project.code,
+        cases: project.cases.map(test => ({input: test.input, expected: test.expected}))
+      });
       saveWorkspace();
     } catch (error) {
       alert(`Could not load project: ${error.message}`);
