@@ -3,7 +3,9 @@ import urllib.error
 import urllib.request
 
 from django.conf import settings
+from django.http import JsonResponse
 from django.shortcuts import render
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
 default_code = '''
@@ -65,7 +67,8 @@ def piston_request(path, payload=None):
         return json.loads(response.read().decode("utf-8"))
 
 
-@require_http_methods(["GET", "POST"])
+@ensure_csrf_cookie
+@require_http_methods(["GET"])
 def index(request):
     runtimes = []
     runtime_error = ""
@@ -74,33 +77,63 @@ def index(request):
     except Exception as exc:
         runtime_error = f"Couldn't load Piston runtimes: {exc}"
 
-    result = None
-    form = {
-        "language": request.POST.get("language", "java"),
-        "version": request.POST.get("version", "15.0.2"),
-        "code": request.POST.get("code", default_code),
-        "stdin": request.POST.get("stdin", ""),
-    }
-
-    if request.method == "POST":
-        try:
-            payload = {
-                "language": form["language"],
-                "version": form["version"],
-                "files": [{"name": "Main.java" if form["language"] == "java" else "main",
-                           "content": form["code"]}],
-                "stdin": form["stdin"],
-            }
-            result = piston_request("/api/v2/execute", payload)
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            result = {"message": f"Piston returned HTTP {exc.code}", "stderr": detail}
-        except Exception as exc:
-            result = {"message": "Could not execute code", "stderr": str(exc)}
-
     return render(request, "runner/index.html", {
         "runtimes": runtimes,
         "runtime_error": runtime_error,
-        "result": result,
-        "form": form,
+        "default_code": default_code,
     })
+
+
+@require_http_methods(["POST"])
+def run_code(request):
+    """Execute one test case and always return a JSON response."""
+    try:
+        try:
+            data = json.loads(request.body.decode("utf-8") or "{}")
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return JsonResponse({"error": "Request body must be valid UTF-8 JSON."}, status=400)
+
+        if not isinstance(data, dict):
+            return JsonResponse({"error": "Request body must be a JSON object."}, status=400)
+
+        language = data.get("language")
+        version = data.get("version")
+        code = data.get("code")
+        stdin = data.get("input", "")
+
+        if not all(isinstance(value, str) for value in (language, version, code, stdin)):
+            return JsonResponse({
+                "error": "Invalid request: language, version, code, and input must be strings."
+            }, status=400)
+        if not language or not version:
+            return JsonResponse({"error": "Select a language and runtime version first."}, status=400)
+
+        # Piston's Java runtime appends .java itself; pass a basename, not Main.java.
+        filename = "Main" if language == "java" else "main"
+        payload = {
+            "language": language,
+            "version": version,
+            "files": [{"name": filename, "content": code}],
+            "stdin": stdin,
+        }
+        result = piston_request("/api/v2/execute", payload)
+        if not isinstance(result, dict):
+            return JsonResponse({"error": "Piston returned an unexpected response."}, status=502)
+        return JsonResponse(result)
+
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        return JsonResponse({
+            "error": f"Piston returned HTTP {exc.code}.",
+            "details": detail,
+        }, status=502)
+    except urllib.error.URLError as exc:
+        return JsonResponse({
+            "error": "Could not connect to the Piston server.",
+            "details": str(exc.reason),
+        }, status=502)
+    except Exception as exc:
+        return JsonResponse({
+            "error": "Could not execute code.",
+            "details": str(exc),
+        }, status=502)

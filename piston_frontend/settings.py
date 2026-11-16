@@ -21,7 +21,10 @@ TEMPLATES = [{
     "BACKEND": "django.template.backends.django.DjangoTemplates",
     "DIRS": [BASE_DIR / "templates"],
     "APP_DIRS": True,
-    "OPTIONS": {"context_processors": ["django.template.context_processors.request"]},
+    "OPTIONS": {"context_processors": [
+            "django.template.context_processors.request",
+            "django.template.context_processors.csrf",
+        ]},
 }]
 WSGI_APPLICATION = "piston_frontend.wsgi.application"
 STATIC_URL = "static/"

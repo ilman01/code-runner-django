@@ -5,148 +5,453 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Code Runner</title>
   <style>
-    :root { color-scheme: dark; --bg:#101318; --panel:#191e27; --border:#2b3340; --muted:#929baa; --accent:#79a9ff; }
+    :root { color-scheme:dark; --bg:#101318; --panel:#191e27; --border:#2b3340; --muted:#929baa; --accent:#79a9ff; }
     * { box-sizing:border-box }
+    [hidden] { display:none !important; }
     body { margin:0; background:var(--bg); color:#e8edf5; font:14px Inter,system-ui,sans-serif; }
-    header { height:58px; padding:0 22px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); background:#151a22; }
+    header { min-height:58px; padding:10px 22px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); background:#151a22; gap:12px; }
     header strong { font-size:16px; letter-spacing:.2px }
-    .tag { color:var(--muted); font-size:12px }
-    main { max-width:1500px; margin:auto; padding:18px; }
-    .toolbar { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
-    select, button { border:1px solid var(--border); border-radius:7px; padding:9px 12px; color:#e8edf5; background:var(--panel); font:inherit; }
-    select { min-width:150px }
-    button { cursor:pointer; background:#3978e8; border-color:#3978e8; color:white; font-weight:650; padding-inline:20px; }
-    button:hover { background:#2868d8 }
-    .workspace { display:grid; grid-template-columns:minmax(0, 1fr) 340px; gap:14px; align-items:stretch; }
+    .tag,.meta { color:var(--muted); font-size:12px }
+    main { max-width:1550px; margin:auto; padding:18px; }
+    .toolbar { display:flex; align-items:center; gap:9px; margin-bottom:14px; flex-wrap:wrap; }
+    select,button,.file-label { border:1px solid var(--border); border-radius:7px; padding:9px 12px; color:#e8edf5; background:var(--panel); font:inherit; }
+    select { min-width:190px }
+    button,.file-label { cursor:pointer; }
+    button.primary { background:#3978e8; border-color:#3978e8; color:white; font-weight:650; padding-inline:20px; }
+    button:hover,.file-label:hover { filter:brightness(1.13) }
+    button:disabled { opacity:.55; cursor:wait }
+    .workspace { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:16px; align-items:start; }
+    .workspace > * { min-width:0; }
     .panel { background:var(--panel); border:1px solid var(--border); border-radius:9px; overflow:hidden; min-width:0; }
-    .panel-title { padding:11px 14px; border-bottom:1px solid var(--border); color:#cbd3df; font-weight:600; display:flex; justify-content:space-between; }
-    #editor { height:590px; width:100%; }
-    .side { display:flex; flex-direction:column; gap:14px; }
-    textarea { width:100%; resize:vertical; min-height:130px; border:0; outline:0; padding:12px; color:#e8edf5; background:#11161e; font:13px ui-monospace,monospace; }
-    .output { min-height:120px; max-height:250px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; padding:12px; color:#d5deea; background:#11161e; font:13px ui-monospace,monospace; }
+    .panel-title { padding:11px 14px; border-bottom:1px solid var(--border); color:#cbd3df; font-weight:600; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    #editor { height:650px; width:100%; }
+    textarea { display:block; width:100%; resize:vertical; min-height:105px; border:0; outline:0; padding:12px; color:#e8edf5; background:#11161e; font:13px ui-monospace,monospace; }
+    .case-list { display:flex; flex-direction:column; gap:12px; }
+    .case { border:1px solid var(--border); border-radius:9px; overflow:hidden; background:var(--panel); }
+    .case-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-bottom:1px solid var(--border); }
+    .case-title { font-weight:650 }
+    .case-fields { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:0; }
+    .field { min-width:0; }
+    .field + .field { border-left:1px solid var(--border); }
+    .field-label { padding:9px 12px 0; display:block; color:#cbd3df; font-size:12px; }
+    .field textarea { min-height:125px; }
+    .actual { border-top:1px solid var(--border); }
+    .actual-output { display:block; margin:0; min-height:65px; max-height:240px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; padding:12px; color:#d5deea; background:#11161e; font:13px ui-monospace,monospace; }
     .empty { color:var(--muted) }
-    .meta { color:var(--muted); font-size:12px; font-weight:400 }
+    .status { color:var(--muted); font-size:12px; margin-left:auto; }
+    .status.pass { color:#79d69b } .status.fail { color:#ff9b9b } .status.running { color:#9db8e8 }
+    .case-result { font-size:12px; font-weight:650; }
+    .case-result.pass { color:#79d69b } .case-result.fail { color:#ff9b9b }
     .error { margin-bottom:12px; padding:10px 12px; border:1px solid #75434a; background:#321f25; color:#ffb9c0; border-radius:7px; }
-    .status { color:#9db8e8; font-size:12px; margin-left:auto; }
-    @media(max-width:850px) { .workspace { grid-template-columns:1fr } #editor {height:440px} .side {display:grid; grid-template-columns:1fr 1fr} }
-    @media(max-width:560px) { main {padding:10px} .side {display:flex} header {padding:0 13px} }
+    .subtle { background:#252d39; border-color:#394454; color:#dce4ef; padding:8px 11px; font-size:12px; }
+    .file-label { display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; }
+    select:focus-visible, button:focus-visible, .file-label:focus-visible, textarea:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    .field textarea { min-width:0; }
+    .case-head > * { flex:0 0 auto; }
+    .case-head .case-title { flex:1 1 auto; }
+    .danger { color:#ffb9c0; }
+    .toolbar-spacer { flex:1; }
+    #import-file { display:none; }
+    @media(max-width:1000px) { .workspace { grid-template-columns:1fr } #editor {height:500px} }
+    @media(max-width:600px) { main {padding:10px} header {padding:10px 13px} .toolbar {align-items:stretch} .toolbar > * {max-width:100%} .toolbar-spacer {display:none} .status {width:100%; margin-left:0} .case-fields {grid-template-columns:1fr} .field + .field {border-left:0;border-top:1px solid var(--border)} #editor {height:420px} }
   </style>
 </head>
 <body>
 <header><strong>⌘ Code Runner</strong><span class="tag">Powered by Piston</span></header>
 <main>
   {% if runtime_error %}<div class="error">{{ runtime_error }}</div>{% endif %}
-  <form method="post" id="run-form">
-    {% csrf_token %}
-    <div class="toolbar">
-      <select name="language" id="language" aria-label="Language">
-        {% for runtime in runtimes %}
-          <option value="{{ runtime.language }}" data-version="{{ runtime.version }}"
-            {% if form.language == runtime.language and form.version == runtime.version %}selected{% endif %}>
-            {{ runtime.language }} — {{ runtime.version }}
-          </option>
-        {% endfor %}
-      </select>
-      <input type="hidden" name="version" id="version" value="{{ form.version }}">
-      <button type="submit" id="run-button">▶ Run code</button>
-      <span class="status" id="status">Ready</span>
-    </div>
-    <div class="workspace">
-      <section class="panel">
-        <div class="panel-title"><span>Source code</span><span class="meta">Monaco Editor</span></div>
-        <div id="editor"></div>
-        <textarea name="code" id="code-fallback" style="display:none">{{ form.code }}</textarea>
-      </section>
-      <aside class="side">
-        <section class="panel">
-          <div class="panel-title">Standard input <span class="meta">stdin</span></div>
-          <textarea name="stdin" placeholder="Enter input passed to your program...">{{ form.stdin }}</textarea>
-        </section>
-        <section class="panel">
-          <div class="panel-title">Output <span class="meta">stdout</span></div>
-          <div class="output">{% if result %}{{ result.run.output|default:result.run.stdout|default:"" }}{% if result.run.stderr %}
-
-[stderr]
-{{ result.run.stderr }}{% endif %}{% if result.compile.output %}
-
-[compile output]
-{{ result.compile.output }}{% endif %}{% if result.message %}{{ result.message }}{% endif %}{% else %}<span class="empty">Your program's output will appear here.</span>{% endif %}</div>
-        </section>
-        {% if result.run %}
-        <section class="panel">
-          <div class="panel-title">Execution details</div>
-          <div class="output">Exit code: {{ result.run.code|default:"—" }}
-Time: {{ result.run.time|default:"—" }} s
-Memory: {{ result.run.memory|default:"—" }} KB</div>
-        </section>
-        {% endif %}
-      </aside>
-    </div>
-  </form>
+  <div class="toolbar">
+    <select id="language" aria-label="Language">
+      {% if not runtimes %}
+        <option value="java" data-version="15.0.2" selected>java — 15.0.2 (fallback)</option>
+      {% else %}
+      {% for runtime in runtimes %}
+        <option value="{{ runtime.language }}" data-version="{{ runtime.version }}"
+          {% if runtime.language == "java" %}selected{% endif %}>
+          {{ runtime.language }} — {{ runtime.version }}
+        </option>
+      {% endfor %}
+      {% endif %}
+    </select>
+    <button class="primary" type="button" id="run-button">▶ Run all tests</button>
+    <button class="subtle" type="button" id="add-case">＋ Add test case</button>
+    <span class="toolbar-spacer"></span>
+    <button class="subtle" type="button" id="download-button">↓ Download project</button>
+    <label class="file-label" for="import-file">↑ Load project</label>
+    <input type="file" id="import-file" accept=".json,application/json">
+    <button class="subtle danger" type="button" id="reset-button">Reset</button>
+    <span class="status" id="status" aria-live="polite">Ready</span>
+  </div>
+  <div class="workspace">
+    <section class="panel">
+      <div class="panel-title"><span>Source code</span><span class="meta">Monaco Editor</span></div>
+      <div id="editor"></div>
+      <textarea id="code-fallback" hidden>{{ default_code }}</textarea>
+    </section>
+    <section>
+      <div class="case-list" id="case-list"></div>
+    </section>
+  </div>
 </main>
+{% csrf_token %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs/loader.min.js"></script>
 <script>
-  const codeField = document.getElementById('code-fallback');
+(() => {
+  const STORAGE_KEY = 'piston-code-runner-workspace-v1';
+  const defaultCode = document.getElementById('code-fallback').value;
   const languageSelect = document.getElementById('language');
-  const versionField = document.getElementById('version');
-  const form = document.getElementById('run-form');
-  let editor;
+  const runButton = document.getElementById('run-button');
+  const caseList = document.getElementById('case-list');
+  const statusEl = document.getElementById('status');
+  const csrfInput = document.querySelector('input[name=csrfmiddlewaretoken]');
+  const csrfToken = csrfInput?.value || readCookie('csrftoken');
+  const runUrl = '{% url 'run_code' %}';
   const languageMap = { java:'java', python:'python', c:'c', cpp:'cpp', javascript:'javascript', typescript:'typescript', go:'go', rust:'rust', ruby:'ruby', php:'php', csharp:'csharp', kotlin:'kotlin' };
-  function selectedRuntime() {
-    const option = languageSelect.selectedOptions[0];
-    if (option) versionField.value = option.dataset.version;
-  }
-  languageSelect.addEventListener('change', selectedRuntime);
-  selectedRuntime();
 
+  function readCookie(name) {
+    const prefix = `${name}=`;
+    const cookie = document.cookie.split(';').map(part => part.trim()).find(part => part.startsWith(prefix));
+    return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : '';
+  }
+
+  let editor = null;
+  let cases = [];
+  let nextCaseId = 1;
+  let isRunning = false;
+
+  function defaultWorkspace() {
+    const option = [...languageSelect.options].find(item => item.value === 'java') || languageSelect.options[0];
+    return {
+      language: option ? option.value : 'java',
+      version: option ? option.dataset.version : '',
+      code: defaultCode,
+      cases: [{ input: '', expected: '', actual: '', result: null }]
+    };
+  }
+
+  function setStatus(message, kind = '') {
+    statusEl.textContent = message;
+    statusEl.className = 'status ' + kind;
+  }
+
+  function saveWorkspace(showStatus = true) {
+    const option = languageSelect.selectedOptions[0];
+    const workspace = {
+      language: languageSelect.value,
+      version: option ? option.dataset.version : '',
+      code: editor ? editor.getValue() : document.getElementById('code-fallback').value,
+      cases: cases.map(({input, expected, actual, result}) => ({input, expected, actual, result}))
+    };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+      if (showStatus) setStatus('Saved in this browser');
+    } catch (error) {
+      if (showStatus) setStatus('Could not save locally');
+      console.error(error);
+    }
+  }
+
+  function readWorkspace() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      if (!parsed || typeof parsed.code !== 'string' || !Array.isArray(parsed.cases)) return null;
+      return parsed;
+    } catch (error) {
+      console.warn('Ignoring invalid saved workspace:', error);
+      return null;
+    }
+  }
+
+  function addCase(data = {}) {
+    const id = nextCaseId++;
+    const item = {
+      id,
+      input: typeof data.input === 'string' ? data.input : '',
+      expected: typeof data.expected === 'string' ? data.expected : '',
+      actual: typeof data.actual === 'string' ? data.actual : '',
+      result: data.result || null
+    };
+    cases.push(item);
+
+    const card = document.createElement('article');
+    card.className = 'case';
+    card.dataset.caseId = id;
+
+    const head = document.createElement('div');
+    head.className = 'case-head';
+    const title = document.createElement('span');
+    title.className = 'case-title';
+    title.textContent = `Test case ${cases.length}`;
+    const result = document.createElement('span');
+    result.className = 'case-result';
+    result.textContent = item.result === 'pass' ? 'PASS' : item.result === 'fail' ? 'FAIL' : 'NOT RUN';
+    if (item.result === 'pass' || item.result === 'fail') {
+        result.classList.add(item.result);
+    }
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'subtle danger';
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', () => {
+      cases = cases.filter(test => test.id !== id);
+      card.remove();
+      renumberCases();
+      saveWorkspace();
+    });
+    head.append(title, result, remove);
+
+    const fields = document.createElement('div');
+    fields.className = 'case-fields';
+    const inputField = makeTextareaField('Input', 'Enter this test case’s standard input…', item.input, value => {
+      item.input = value; saveWorkspace();
+    });
+    const expectedField = makeTextareaField('Expected output', 'Enter the output you expect…', item.expected, value => {
+      item.expected = value; saveWorkspace();
+    });
+    fields.append(inputField, expectedField);
+
+    const actual = document.createElement('div');
+    actual.className = 'actual';
+    const actualTitle = document.createElement('div');
+    actualTitle.className = 'field-label';
+    actualTitle.textContent = 'Actual output';
+    const output = document.createElement('pre');
+    output.className = 'actual-output empty';
+    output.textContent = item.actual || 'Run the code to see its output.';
+    actual.append(actualTitle, output);
+    card.append(head, fields, actual);
+    caseList.append(card);
+    item.elements = {card, result, output};
+    renumberCases();
+  }
+
+  function makeTextareaField(label, placeholder, value, onInput) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'field';
+    const heading = document.createElement('label');
+    heading.className = 'field-label';
+    heading.textContent = label;
+    const textarea = document.createElement('textarea');
+    textarea.placeholder = placeholder;
+    textarea.value = value;
+    textarea.addEventListener('input', () => onInput(textarea.value));
+    wrapper.append(heading, textarea);
+    return wrapper;
+  }
+
+  function renumberCases() {
+    cases.forEach((test, index) => {
+      const title = test.elements?.card.querySelector('.case-title');
+      if (title) title.textContent = `Test case ${index + 1}`;
+    });
+  }
+
+  function updateCaseDisplay(test, outputText, resultKind, resultLabel) {
+    test.actual = outputText;
+    test.result = resultKind;
+    test.elements.output.textContent = outputText || '(No output)';
+    test.elements.output.classList.toggle('empty', !outputText);
+    test.elements.result.textContent = resultLabel;
+    test.elements.result.className = 'case-result ' + resultKind;
+  }
+
+  function normalizeOutput(value) {
+    // Treat Windows and Unix line endings as equivalent; otherwise compare exactly.
+    return String(value).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  }
+
+  async function runAllTests() {
+    if (isRunning) return;
+    if (!cases.length) {
+      setStatus('Add at least one test case', 'fail');
+      return;
+    }
+    isRunning = true;
+    runButton.disabled = true;
+    document.getElementById('add-case').disabled = true;
+    setStatus('Running tests…', 'running');
+
+    const code = editor ? editor.getValue() : document.getElementById('code-fallback').value;
+    const option = languageSelect.selectedOptions[0];
+    const language = languageSelect.value;
+    const version = option ? option.dataset.version : '';
+
+    let passed = 0;
+    let failed = 0;
+    try {
+      for (let index = 0; index < cases.length; index++) {
+        const test = cases[index];
+        setStatus(`Running test ${index + 1}/${cases.length}…`, 'running');
+        try {
+          const response = await fetch(runUrl, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify({language, version, code, input: test.input})
+          });
+          const responseText = await response.text();
+          let data;
+          try {
+            data = responseText ? JSON.parse(responseText) : {};
+          } catch (parseError) {
+            const preview = responseText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220);
+            throw new Error(`Server returned a non-JSON response (HTTP ${response.status}). ${preview}`);
+          }
+          if (!response.ok || data.error) {
+            const message = [data.error, data.details].filter(Boolean).join('\n');
+            throw new Error(message || `Execution request failed (HTTP ${response.status}).`);
+          }
+
+          const run = data.run || {};
+          const compile = data.compile || {};
+          const actual = run.stdout ?? run.output ?? '';
+          const diagnostics = [compile.output, run.stderr].filter(Boolean).join('\n');
+          if (compile.code !== undefined && compile.code !== 0) {
+            updateCaseDisplay(test, [actual, diagnostics].filter(Boolean).join('\n\n') || 'Compilation failed.', 'fail', 'COMPILE ERROR');
+            failed++;
+          } else if (run.code !== undefined && run.code !== 0) {
+            updateCaseDisplay(test, [actual, diagnostics].filter(Boolean).join('\n\n') || `Program exited with code ${run.code}.`, 'fail', 'RUNTIME ERROR');
+            failed++;
+          } else if (normalizeOutput(actual) === normalizeOutput(test.expected)) {
+            updateCaseDisplay(test, actual, 'pass', 'PASS');
+            passed++;
+          } else {
+            updateCaseDisplay(test, actual, 'fail', 'WRONG ANSWER');
+            failed++;
+          }
+          saveWorkspace(false);
+        } catch (error) {
+          updateCaseDisplay(test, `Request failed: ${error.message}`, 'fail', 'ERROR');
+          failed++;
+        }
+        saveWorkspace(false);
+      }
+      setStatus(`${passed} passed · ${failed} failed`, failed ? 'fail' : 'pass');
+    } finally {
+      isRunning = false;
+      runButton.disabled = false;
+      document.getElementById('add-case').disabled = false;
+      saveWorkspace(false);
+    }
+  }
+
+  function applyWorkspace(workspace) {
+    const option = [...languageSelect.options].find(item =>
+      item.value === workspace.language && item.dataset.version === workspace.version
+    ) || [...languageSelect.options].find(item => item.value === workspace.language);
+    if (option) languageSelect.value = option.value;
+    if (editor) {
+      editor.setValue(workspace.code);
+      monaco.editor.setModelLanguage(editor.getModel(), languageMap[languageSelect.value] || 'plaintext');
+    } else {
+      document.getElementById('code-fallback').value = workspace.code;
+    }
+    cases = [];
+    nextCaseId = 1;
+    caseList.replaceChildren();
+    (workspace.cases.length ? workspace.cases : [{}]).forEach(addCase);
+    setStatus('Workspace loaded');
+  }
+
+  function downloadWorkspace() {
+    const option = languageSelect.selectedOptions[0];
+    const project = {
+      format: 'piston-code-runner',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      language: languageSelect.value,
+      version: option ? option.dataset.version : '',
+      code: editor ? editor.getValue() : document.getElementById('code-fallback').value,
+      cases: cases.map(test => ({input: test.input, expected: test.expected}))
+    };
+    const blob = new Blob([JSON.stringify(project, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'code-runner-project.json';
+    link.click();
+    URL.revokeObjectURL(url);
+    setStatus('Project downloaded');
+  }
+
+  async function importWorkspace(file) {
+    try {
+      const project = JSON.parse(await file.text());
+      if (project.format !== 'piston-code-runner' || project.version !== 1 ||
+          typeof project.code !== 'string' || !Array.isArray(project.cases)) {
+        throw new Error('This file is not a supported Code Runner project.');
+      }
+      if (!project.cases.every(test => test && typeof test.input === 'string' && typeof test.expected === 'string')) {
+        throw new Error('One or more test cases are invalid.');
+      }
+      applyWorkspace({...project, cases: project.cases.map(test => ({input: test.input, expected: test.expected}))});
+      saveWorkspace();
+    } catch (error) {
+      alert(`Could not load project: ${error.message}`);
+    }
+  }
+
+  document.getElementById('add-case').addEventListener('click', () => {
+    addCase();
+    saveWorkspace();
+  });
+  runButton.addEventListener('click', runAllTests);
+  document.getElementById('download-button').addEventListener('click', downloadWorkspace);
+  document.getElementById('import-file').addEventListener('change', event => {
+    if (event.target.files[0]) importWorkspace(event.target.files[0]);
+    event.target.value = '';
+  });
+  document.getElementById('reset-button').addEventListener('click', () => {
+    if (!confirm('Reset the code, language, and all test cases? This cannot be undone.')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    applyWorkspace(defaultWorkspace());
+    saveWorkspace();
+  });
+  languageSelect.addEventListener('change', () => {
+    if (editor) monaco.editor.setModelLanguage(editor.getModel(), languageMap[languageSelect.value] || 'plaintext');
+    saveWorkspace();
+  });
+
+  const savedWorkspace = readWorkspace();
+  const initialWorkspace = savedWorkspace || defaultWorkspace();
+  applyWorkspace(initialWorkspace);
   if (window.require) {
-    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs' } });
-    require(['vs/editor/editor.main'], function () {
-      const lang = languageMap[languageSelect.value] || 'plaintext';
+    require.config({paths: {vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs'}});
+    require(['vs/editor/editor.main'], () => {
       editor = monaco.editor.create(document.getElementById('editor'), {
-        value: codeField.value, language: lang, theme: 'vs-dark',
-        automaticLayout: true, minimap: { enabled: false },
+        value: initialWorkspace.code,
+        language: languageMap[languageSelect.value] || 'plaintext',
+        theme: 'vs-dark', automaticLayout: true, minimap: {enabled: false},
         fontSize: 14, tabSize: 4, scrollBeyondLastLine: false,
         suggestOnTriggerCharacters: true, quickSuggestions: true
       });
       monaco.languages.registerCompletionItemProvider('java', {
-          provideCompletionItems: (model, position) => {
-              const word = model.getWordUntilPosition(position);
-              const range = {
-                  startLineNumber: position.lineNumber,
-                  endLineNumber: position.lineNumber,
-                  startColumn: word.startColumn,
-                  endColumn: word.endColumn,
-              };
-
-              return {
-                  suggestions: [
-                      {
-                          label: 'sout',
-                          kind: monaco.languages.CompletionItemKind.Snippet,
-                          insertText: 'System.out.println(${1:});',
-                          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                          documentation: 'Print to standard output',
-                          range: range
-                      }
-                  ]
-              };
-          }
+        provideCompletionItems: (model, position) => {
+          const word = model.getWordUntilPosition(position);
+          const range = {
+            startLineNumber: position.lineNumber, endLineNumber: position.lineNumber,
+            startColumn: word.startColumn, endColumn: word.endColumn
+          };
+          return {suggestions: [{
+            label: 'sout', kind: monaco.languages.CompletionItemKind.Snippet,
+            insertText: 'System.out.println(${1:});',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'Print to standard output', range
+          }]};
+        }
       });
-      languageSelect.addEventListener('change', () => {
-        monaco.editor.setModelLanguage(editor.getModel(), languageMap[languageSelect.value] || 'plaintext');
-      });
-      form.addEventListener('submit', () => { codeField.value = editor.getValue(); });
+      editor.onDidChangeModelContent(() => saveWorkspace(false));
+      document.getElementById('code-fallback').hidden = true;
+      saveWorkspace();
     });
   } else {
-    codeField.style.display = 'block';
     document.getElementById('editor').style.display = 'none';
+    const fallback = document.getElementById('code-fallback');
+    fallback.hidden = false;
+    fallback.addEventListener('input', saveWorkspace);
   }
-  form.addEventListener('submit', () => {
-    selectedRuntime();
-    document.getElementById('status').textContent = 'Executing…';
-    document.getElementById('run-button').disabled = true;
-  });
+})();
 </script>
 </body>
 </html>
