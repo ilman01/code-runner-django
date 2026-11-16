@@ -187,8 +187,9 @@
     const result = document.createElement('span');
     result.className = 'case-result';
     result.textContent = item.result === 'pass' ? 'PASS' : item.result === 'fail' ? 'FAIL' : 'NOT RUN';
+    // Only add known, non-empty CSS state classes. New test cases have no result yet.
     if (item.result === 'pass' || item.result === 'fail') {
-        result.classList.add(item.result);
+      result.classList.add(item.result);
     }
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -258,8 +259,14 @@
   }
 
   function normalizeOutput(value) {
-    // Treat Windows and Unix line endings as equivalent; otherwise compare exactly.
-    return String(value).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    // Ignore line-ending differences and trailing whitespace, but preserve
+    // indentation and spacing within each line because those can be meaningful.
+    return String(value)
+      .replace(/\r\n?/g, '\n')
+      .split('\n')
+      .map(line => line.replace(/[ \t]+$/g, ''))
+      .join('\n')
+      .replace(/\n+$/g, '');
   }
 
   async function runAllTests() {
