@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Code Runner</title>
+  <style>
+    :root { color-scheme: dark; --bg:#101318; --panel:#191e27; --border:#2b3340; --muted:#929baa; --accent:#79a9ff; }
+    * { box-sizing:border-box }
+    body { margin:0; background:var(--bg); color:#e8edf5; font:14px Inter,system-ui,sans-serif; }
+    header { height:58px; padding:0 22px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); background:#151a22; }
+    header strong { font-size:16px; letter-spacing:.2px }
+    .tag { color:var(--muted); font-size:12px }
+    main { max-width:1500px; margin:auto; padding:18px; }
+    .toolbar { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+    select, button { border:1px solid var(--border); border-radius:7px; padding:9px 12px; color:#e8edf5; background:var(--panel); font:inherit; }
+    select { min-width:150px }
+    button { cursor:pointer; background:#3978e8; border-color:#3978e8; color:white; font-weight:650; padding-inline:20px; }
+    button:hover { background:#2868d8 }
+    .workspace { display:grid; grid-template-columns:minmax(0, 1fr) 340px; gap:14px; align-items:stretch; }
+    .panel { background:var(--panel); border:1px solid var(--border); border-radius:9px; overflow:hidden; min-width:0; }
+    .panel-title { padding:11px 14px; border-bottom:1px solid var(--border); color:#cbd3df; font-weight:600; display:flex; justify-content:space-between; }
+    #editor { height:590px; width:100%; }
+    .side { display:flex; flex-direction:column; gap:14px; }
+    textarea { width:100%; resize:vertical; min-height:130px; border:0; outline:0; padding:12px; color:#e8edf5; background:#11161e; font:13px ui-monospace,monospace; }
+    .output { min-height:120px; max-height:250px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; padding:12px; color:#d5deea; background:#11161e; font:13px ui-monospace,monospace; }
+    .empty { color:var(--muted) }
+    .meta { color:var(--muted); font-size:12px; font-weight:400 }
+    .error { margin-bottom:12px; padding:10px 12px; border:1px solid #75434a; background:#321f25; color:#ffb9c0; border-radius:7px; }
+    .status { color:#9db8e8; font-size:12px; margin-left:auto; }
+    @media(max-width:850px) { .workspace { grid-template-columns:1fr } #editor {height:440px} .side {display:grid; grid-template-columns:1fr 1fr} }
+    @media(max-width:560px) { main {padding:10px} .side {display:flex} header {padding:0 13px} }
+  </style>
+</head>
+<body>
+<header><strong>⌘ Code Runner</strong><span class="tag">Powered by Piston</span></header>
+<main>
+  {% if runtime_error %}<div class="error">{{ runtime_error }}</div>{% endif %}
+  <form method="post" id="run-form">
+    {% csrf_token %}
+    <div class="toolbar">
+      <select name="language" id="language" aria-label="Language">
+        {% for runtime in runtimes %}
+          <option value="{{ runtime.language }}" data-version="{{ runtime.version }}"
+            {% if form.language == runtime.language and form.version == runtime.version %}selected{% endif %}>
+            {{ runtime.language }} — {{ runtime.version }}
+          </option>
+        {% endfor %}
+      </select>
+      <input type="hidden" name="version" id="version" value="{{ form.version }}">
+      <button type="submit" id="run-button">▶ Run code</button>
+      <span class="status" id="status">Ready</span>
+    </div>
+    <div class="workspace">
+      <section class="panel">
+        <div class="panel-title"><span>Source code</span><span class="meta">Monaco Editor</span></div>
+        <div id="editor"></div>
+        <textarea name="code" id="code-fallback" style="display:none">{{ form.code }}</textarea>
+      </section>
+      <aside class="side">
+        <section class="panel">
+          <div class="panel-title">Standard input <span class="meta">stdin</span></div>
+          <textarea name="stdin" placeholder="Enter input passed to your program...">{{ form.stdin }}</textarea>
+        </section>
+        <section class="panel">
+          <div class="panel-title">Output <span class="meta">stdout</span></div>
+          <div class="output">{% if result %}{{ result.run.output|default:result.run.stdout|default:"" }}{% if result.run.stderr %}
+
+[stderr]
+{{ result.run.stderr }}{% endif %}{% if result.compile.output %}
+
+[compile output]
+{{ result.compile.output }}{% endif %}{% if result.message %}{{ result.message }}{% endif %}{% else %}<span class="empty">Your program's output will appear here.</span>{% endif %}</div>
+        </section>
+        {% if result.run %}
+        <section class="panel">
+          <div class="panel-title">Execution details</div>
+          <div class="output">Exit code: {{ result.run.code|default:"—" }}
+Time: {{ result.run.time|default:"—" }} s
+Memory: {{ result.run.memory|default:"—" }} KB</div>
+        </section>
+        {% endif %}
+      </aside>
+    </div>
+  </form>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs/loader.min.js"></script>
+<script>
+  const codeField = document.getElementById('code-fallback');
+  const languageSelect = document.getElementById('language');
+  const versionField = document.getElementById('version');
+  const form = document.getElementById('run-form');
+  let editor;
+  const languageMap = { java:'java', python:'python', c:'c', cpp:'cpp', javascript:'javascript', typescript:'typescript', go:'go', rust:'rust', ruby:'ruby', php:'php', csharp:'csharp', kotlin:'kotlin' };
+  function selectedRuntime() {
+    const option = languageSelect.selectedOptions[0];
+    if (option) versionField.value = option.dataset.version;
+  }
+  languageSelect.addEventListener('change', selectedRuntime);
+  selectedRuntime();
+
+  if (window.require) {
+    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+      const lang = languageMap[languageSelect.value] || 'plaintext';
+      editor = monaco.editor.create(document.getElementById('editor'), {
+        value: codeField.value, language: lang, theme: 'vs-dark',
+        automaticLayout: true, minimap: { enabled: false },
+        fontSize: 14, tabSize: 4, scrollBeyondLastLine: false,
+        suggestOnTriggerCharacters: true, quickSuggestions: true
+      });
+      monaco.languages.registerCompletionItemProvider('java', {
+          provideCompletionItems: (model, position) => {
+              const word = model.getWordUntilPosition(position);
+              const range = {
+                  startLineNumber: position.lineNumber,
+                  endLineNumber: position.lineNumber,
+                  startColumn: word.startColumn,
+                  endColumn: word.endColumn,
+              };
+
+              return {
+                  suggestions: [
+                      {
+                          label: 'sout',
+                          kind: monaco.languages.CompletionItemKind.Snippet,
+                          insertText: 'System.out.println(${1:});',
+                          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                          documentation: 'Print to standard output',
+                          range: range
+                      }
+                  ]
+              };
+          }
+      });
+      languageSelect.addEventListener('change', () => {
+        monaco.editor.setModelLanguage(editor.getModel(), languageMap[languageSelect.value] || 'plaintext');
+      });
+      form.addEventListener('submit', () => { codeField.value = editor.getValue(); });
+    });
+  } else {
+    codeField.style.display = 'block';
+    document.getElementById('editor').style.display = 'none';
+  }
+  form.addEventListener('submit', () => {
+    selectedRuntime();
+    document.getElementById('status').textContent = 'Executing…';
+    document.getElementById('run-button').disabled = true;
+  });
+</script>
+</body>
+</html>
