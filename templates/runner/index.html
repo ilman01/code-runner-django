@@ -1,3 +1,4 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -450,23 +451,13 @@
         language: languageMap[languageSelect.value] || 'plaintext',
         theme: 'vs-dark', automaticLayout: true, minimap: {enabled: false},
         fontSize: 14, tabSize: 4, scrollBeyondLastLine: false,
-        suggestOnTriggerCharacters: true, quickSuggestions: true
+        suggestOnTriggerCharacters: true, quickSuggestions: true,
+        wordBasedSuggestions: 'currentDocument'
       });
-      monaco.languages.registerCompletionItemProvider('java', {
-        provideCompletionItems: (model, position) => {
-          const word = model.getWordUntilPosition(position);
-          const range = {
-            startLineNumber: position.lineNumber, endLineNumber: position.lineNumber,
-            startColumn: word.startColumn, endColumn: word.endColumn
-          };
-          return {suggestions: [{
-            label: 'sout', kind: monaco.languages.CompletionItemKind.Snippet,
-            insertText: 'System.out.println(${1:});',
-            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            documentation: 'Print to standard output', range
-          }]};
-        }
-      });
+
+      // Replaces the old registerCompletionItemProvider('java', {... 'sout' ...}) block
+      registerJavaCompletions();
+
       editor.onDidChangeModelContent(() => saveWorkspace(false));
       document.getElementById('code-fallback').hidden = true;
       saveWorkspace();
@@ -479,5 +470,6 @@
   }
 })();
 </script>
+<script src="{% static 'js/registerJavaCompletions.js' %}"></script>
 </body>
 </html>
