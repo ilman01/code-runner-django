@@ -9,6 +9,4 @@ COPY . .
 
 ENV PYTHONUNBUFFERED=1
 
-VOLUME ["/app/data"]
-
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
